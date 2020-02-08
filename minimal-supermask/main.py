@@ -43,7 +43,7 @@ class SupermaskConv(nn.Conv2d):
         self.scores = nn.Parameter(torch.Tensor(self.weight.size()))
         nn.init.kaiming_uniform_(self.scores, a=math.sqrt(5))
 
-        # turn the gradient on the weights off
+        # NOTE: turn the gradient on the weights off
         self.weight.requires_grad = False
 
     def forward(self, x):
@@ -62,7 +62,7 @@ class SupermaskLinear(nn.Linear):
         self.scores = nn.Parameter(torch.Tensor(self.weight.size()))
         nn.init.kaiming_uniform_(self.scores, a=math.sqrt(5))
 
-        # turn the gradient on the weights off
+        # NOTE: turn the gradient on the weights off
         self.weight.requires_grad = False
 
     def forward(self, x):
@@ -70,6 +70,13 @@ class SupermaskLinear(nn.Linear):
         w = self.weight * subnet
         return F.linear(x, w, self.bias)
         return x
+
+# NOTE: not used here but you want NON-AFFINE Normalization!
+# You don't want learned parameters for your nomralization layer
+# This is what we use instead of regular batch norm.
+class NonAffineBatchNorm(nn.BatchNorm2d):
+    def __init__(self, dim):
+        super(NonAffineBatchNorm, self).__init__(dim, affine=False)
 
 class Net(nn.Module):
     def __init__(self):
@@ -109,7 +116,6 @@ def train(model, device, train_loader, optimizer, epoch):
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.item()))
-            print(optimizer.param_groups[0]['lr'])
 
 
 def test(model, device, test_loader):
@@ -182,6 +188,7 @@ def main():
         batch_size=args.test_batch_size, shuffle=True, **kwargs)
 
     model = Net().to(device)
+    # NOTE: only pass the parameters where p.requires_grad == True to the optimizer! Important!
     optimizer = optim.SGD(
         [p for p in model.parameters() if p.requires_grad],
         lr=args.lr,
