@@ -43,6 +43,11 @@ class SupermaskConv(nn.Conv2d):
         self.scores = nn.Parameter(torch.Tensor(self.weight.size()))
         nn.init.kaiming_uniform_(self.scores, a=math.sqrt(5))
 
+        # NOTE: initialize the weights like this. It's better but depends on your problem.
+        # If something isn't working it might be due to initialization.
+        # Since weights aren't changing it's quite important.
+        nn.init.kaiming_normal_(self.weight, mode="fan_in", nonlinearity="relu")
+
         # NOTE: turn the gradient on the weights off
         self.weight.requires_grad = False
 
@@ -61,6 +66,11 @@ class SupermaskLinear(nn.Linear):
         # initialize the scores
         self.scores = nn.Parameter(torch.Tensor(self.weight.size()))
         nn.init.kaiming_uniform_(self.scores, a=math.sqrt(5))
+
+        # NOTE: initialize the weights like this. It's better but depends on your problem.
+        # If something isn't working it might be due to initialization.
+        # Since weights aren't changing it's quite important.
+        nn.init.kaiming_normal_(self.weight, mode="fan_in", nonlinearity="relu")
 
         # NOTE: turn the gradient on the weights off
         self.weight.requires_grad = False
@@ -103,13 +113,13 @@ class Net(nn.Module):
         return output
 
 
-def train(model, device, train_loader, optimizer, epoch):
+def train(model, device, train_loader, optimizer, criterion, epoch):
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
         output = model(data)
-        loss = F.nll_loss(output, target)
+        loss = criterion(output, target)
         loss.backward()
         optimizer.step()
         if batch_idx % args.log_interval == 0:
@@ -118,7 +128,7 @@ def train(model, device, train_loader, optimizer, epoch):
                 100. * batch_idx / len(train_loader), loss.item()))
 
 
-def test(model, device, test_loader):
+def test(model, device, criterion, test_loader):
     model.eval()
     test_loss = 0
     correct = 0
@@ -126,7 +136,7 @@ def test(model, device, test_loader):
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
             output = model(data)
-            test_loss += F.nll_loss(output, target, reduction='sum').item()  # sum up batch loss
+            test_loss += criterion(output, target)
             pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
             correct += pred.eq(target.view_as(pred)).sum().item()
 
@@ -195,11 +205,11 @@ def main():
         momentum=args.momentum,
         weight_decay=args.wd,
     )
-
+    criterion = nn.CrossEntropyLoss().to(device)
     scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs)
     for epoch in range(1, args.epochs + 1):
-        train(model, device, train_loader, optimizer, epoch)
-        test(model, device, test_loader)
+        train(model, device, train_loader, optimizer, criterion, epoch)
+        test(model, device, criterion, test_loader)
         scheduler.step()
 
     if args.save_model:
